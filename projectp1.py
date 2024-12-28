@@ -1,91 +1,52 @@
+# Import necessary libraries
 import numpy as np
 import cv2
 from matplotlib import pyplot as plt
-import os
-# Code from:
+
+# Code sourced from the OpenCV tutorial on feature matching:
 # https://opencv24-python-tutorials.readthedocs.io/en/latest/py_tutorials/py_feature2d/py_matcher/py_matcher.html
 
-# Prepared for M1IV students, by Prof. Slimane Larabi
+# Prepared for M1IV students by Prof. Slimane Larabi
 #===================================================
-#and on this part is also modified to be accept a large query folder
-# The code is modified for the specific database
-#===================================================
-# Function to get the names of the images from a folder in a list:
-def create_image_path_list(directory_path):
-    image_path_list = []
-    if not os.path.isdir(directory_path):
-        print(f"The specified path '{directory_path}' is not a valid directory.")
-        return image_path_list
 
-    for filename in os.listdir(directory_path):
-        if filename.lower().endswith(('.png', '.jpg', '.jpeg', '.gif')):
-            image_path_list.append(os.path.join(directory_path, filename).replace('\\', '/'))
+# Read the query image and the model image (both in grayscale)
+img1 = cv2.imread('plaque.png', 0)          # Query image
+img2 = cv2.imread('image.jpg', 0)          # Train image
 
-    return image_path_list
+# Initiate the SIFT (Scale-Invariant Feature Transform) detector
+sift = cv2.SIFT_create()
 
-# Function to match a group of images to another group of images and save the results
-def match_images_group_to_group(query_folder, target_folder, output_folder):
-    # Get list of query and target images
-    query_images = create_image_path_list(query_folder)
-    target_images = create_image_path_list(target_folder)
+# Detect keypoints and compute descriptors for both images using SIFT
+kp1, des1 = sift.detectAndCompute(img1, None)  # Keypoints and descriptors for query image
+kp2, des2 = sift.detectAndCompute(img2, None)  # Keypoints and descriptors for model image
 
-    # Initialize SIFT detector
-    sift = cv2.SIFT_create()
+# Print the descriptor of the first keypoint in the query image and its coordinates
+print(des1[0], kp1[0].pt)
 
-    # Threshold for Lowe's ratio test
-    threshold = 0.75
-    all_best_matches = []
+# Initialize the brute-force (BF) matcher with default parameters
+bf = cv2.BFMatcher()
 
-    # Make sure the output folder exists, if not, create it
-    if not os.path.exists(output_folder):
-        os.makedirs(output_folder)
+# Use the BFMatcher to find the best matches between descriptors in the two images
+matches = bf.knnMatch(des1, des2, k=2)  # k=2 returns the two best matches for each descriptor
+#This method finds the `k` nearest neighbors (here `k=2`) for each descriptor in `des1` from `des2`.
 
-    # Iterate through each query image
-    for query_image_path in query_images:
-        print(f"Processing query image: {query_image_path}")
+# Apply the ratio test (Lowe's ratio test) to filter out good matches
+good = []  # List to store the good matches
+for m, n in matches:  # m and n are the two closest matches for each keypoint
+    if m.distance < 0.75 * n.distance:  # Lowe's ratio test: keep matches where the distance ratio is less than 0.75
+        print(m.queryIdx, m.trainIdx, m.distance, n.queryIdx, n.trainIdx, n.distance, n.imgIdx)  # Print match info
+        good.append([m])  # Add the good match to the list
 
-        # Load the query image and compute keypoints and descriptors
-        img1 = cv2.imread(query_image_path, 0)  # query image
-        kp1, des1 = sift.detectAndCompute(img1, None)
+# Draw the good matches between the two images using cv2.drawMatchesKnn
+# Note that we need to pass a list of lists for the matches in this function
+img3 = cv2.drawMatchesKnn(img1, kp1, img2, kp2, good, None, flags=2)
 
-        previous = 0  # Keep track of the number of good matches
-        img_ideal = None  # Ideal matching image (best match)
-        good_matches = []  # Store the good matches for the current query image
-
-        # Iterate through each target image
-        for target_image_path in target_images:
-            img2 = cv2.imread(target_image_path, 0)  # target image
-            kp2, des2 = sift.detectAndCompute(img2, None)
-            bf = cv2.BFMatcher()
-            matches = bf.knnMatch(des1, des2, k=2)  # Find 2 nearest matches
-
-            # Apply Lowe's ratio test
-            good = []
-            for m, n in matches:
-                if m.distance < threshold * n.distance:
-                    good.append([m])
-
-            # If the number of good matches is the highest so far, store it
-            if len(good) > previous:
-                previous = len(good)
-                img_ideal = img2
-                kp_ideal = kp2
-                des_ideal = des2
-                good_matches = good
-
-        # After processing all target images for this query image
-        if img_ideal is not None:
-            # Draw matches and save the image with key points drawn
-            img3 = cv2.drawMatchesKnn(cv2.imread(query_image_path, 0), kp1, img_ideal, kp_ideal, good_matches, None, flags=2)
-
-            # Get the filename of the query image and save the result to the output folder
-            query_filename = os.path.basename(query_image_path)
-            output_image_path = os.path.join(output_folder, f"matched_{query_filename}")
-
-            # Save the result as an image file
-            cv2.imwrite(output_image_path, img3)
-            print(f"Saved matched result for {query_filename} to {output_image_path}")
-
-# Example usage: Match all query images from the "test/query" folder to all target images in the "test/valid" folder
-# and save the results to the "output/matches" folder
-match_images_group_to_group('dataset/query', 'dataset/test', 'output/matches')
+# Display the result using matplotlib
+plt.imshow(img3)  # Display the image with the drawn matches
+plt.show()  # Show the plot
+"""
+- Applies a **ratio test** (Lowe's ratio test) to filter out ambiguous matches:
+       - For each match, it compares the distance of the closest descriptor (`m.distance`) to the distance of the second closest descriptor (`n.distance`).
+       - A match is retained if the closest match is significantly better (e.g., `m.distance < 0.75 * n.distance`).
+     - This reduces false positives and ensures higher-quality matches.
+"""

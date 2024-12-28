@@ -86,6 +86,5 @@ def match_images_group_to_group(query_folder, target_folder, output_folder):
             cv2.imwrite(output_image_path, img3)
             print(f"Saved matched result for {query_filename} to {output_image_path}")
 
-# Example usage: Match all query images from the "test/query" folder to all target images in the "test/valid" folder
 # and save the results to the "output/matches" folder
 match_images_group_to_group('dataset/query', 'dataset/test', 'output/matches')
