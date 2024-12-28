@@ -1,63 +1,63 @@
-import cv2
 import numpy as np
+import cv2
+from matplotlib import pyplot as plt
+import os
 
-def detect_object_in_scene(object_image_path, scene_image_path):
-    """
-    Detects an object in a scene using SIFT and homography.
-    Args:
-        object_image_path (str): Path to the object image.
-        scene_image_path (str): Path to the scene image.
-    """
-    # Load the object and scene images in grayscale
-    object_img = cv2.imread(object_image_path, cv2.IMREAD_GRAYSCALE)
-    scene_img = cv2.imread(scene_image_path, cv2.IMREAD_GRAYSCALE)
-    
-    if object_img is None or scene_img is None:
-        print("Error: Could not load one or both images.")
-        return
-    
-    # Initialize the SIFT detector
-    sift = cv2.SIFT_create()
-    
-    # Detect and compute keypoints and descriptors
-    keypoints_obj, descriptors_obj = sift.detectAndCompute(object_img, None)
-    keypoints_scene, descriptors_scene = sift.detectAndCompute(scene_img, None)
-    
-    # Match descriptors using Brute-Force Matcher
-    bf = cv2.BFMatcher(cv2.NORM_L2)
-    matches = bf.knnMatch(descriptors_obj, descriptors_scene, k=2)
-    
-    # Apply Lowe's ratio test to filter good matches
-    good_matches = []
+# Code from:
+# https://opencv24-python-tutorials.readthedocs.io/en/latest/py_tutorials/py_feature2d/py_matcher/py_matcher.html
+
+# Prepared for M1IV students, by Prof. Slimane Larabi
+#===================================================
+# The code is modified for the specific database
+#===================================================
+# Function to get the names of the images from the "test" folder in a list:
+def create_image_path_list(directory_path):
+    image_path_list = []
+    if not os.path.isdir(directory_path):
+        print(f"The specified path '{directory_path}' is not a valid directory.")
+        return image_path_list
+
+    for filename in os.listdir(directory_path):
+        if filename.lower().endswith(('.png', '.jpg', '.jpeg', '.gif')):
+            image_path_list.append(os.path.join(directory_path, filename).replace('\\', '/'))
+
+    return image_path_list
+#===================================================
+
+# From the Test folder we cropped an image [plaque.png] to search in the dataset [test/valid]
+img1 = cv2.imread('plaque.png', 0)  # queryImage
+
+# To get the images from the database
+ListImages = create_image_path_list('test/valid')
+
+# Initiate SIFT detector
+sift = cv2.SIFT_create()
+
+# Find the keypoints and descriptors with SIFT
+kp1, des1 = sift.detectAndCompute(img1, None)
+
+#
+threshold = 0.75 #it has been found to effectively filter out false matches while retaining good ones
+#note:. Lowering the threshold might result in fewer but more accurate matches, while increasing it might include more matches but also more false positives.
+previous = 0
+# To find the best matching image
+for image in ListImages:
+    img2 = cv2.imread(image, 0)  # trainImage
+    kp2, des2 = sift.detectAndCompute(img2, None)
+    bf = cv2.BFMatcher()
+    matches = bf.knnMatch(des1, des2, k=2)
+    good = []
     for m, n in matches:
-        if m.distance < 0.75 * n.distance:
-            good_matches.append(m)
-    
-    # Draw matches and perform homography if enough good matches are found
-    if len(good_matches) > 10:  # Minimum number of matches required for homography
-        # Extract locations of matched keypoints
-        src_pts = np.float32([keypoints_obj[m.queryIdx].pt for m in good_matches]).reshape(-1, 1, 2)
-        dst_pts = np.float32([keypoints_scene[m.trainIdx].pt for m in good_matches]).reshape(-1, 1, 2)
-        
-        # Compute homography
-        M, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 5.0)
-        
-        # Draw bounding box around the detected object
-        h, w = object_img.shape
-        pts = np.float32([[0, 0], [w, 0], [w, h], [0, h]]).reshape(-1, 1, 2)
-        dst = cv2.perspectiveTransform(pts, M)
-        
-        scene_img_with_box = cv2.polylines(scene_img.copy(), [np.int32(dst)], True, (255, 0, 0), 3, cv2.LINE_AA)
-        
-        # Draw the matches
-        matches_img = cv2.drawMatches(object_img, keypoints_obj, scene_img_with_box, keypoints_scene, good_matches, None, flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS)
-        
-        # Show the result
-        cv2.imshow("Good Matches & Object Detection", matches_img)
-        cv2.waitKey(0)
-        cv2.destroyAllWindows()
-    else:
-        print("Not enough good matches found.")
+        if m.distance < threshold * n.distance:
+            good.append([m])
 
-# Example usage
-detect_object_in_scene("plaque.png", "image.jpg")
+    if len(good) > previous:
+        previous_list = good
+        previous = len(good)
+        img_ideal = img2
+        kp_ideal = kp2
+        des_ideal = des2
+
+img3 = cv2.drawMatchesKnn(img1, kp1, img_ideal, kp_ideal, good, None, flags=2)
+
+plt.imshow(img3), plt.show()
