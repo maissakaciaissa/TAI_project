@@ -28,7 +28,7 @@ def create_image_path_list(directory_path):
 img1 = cv2.imread('plaque.png', 0)  # queryImage
 
 # To get the images from the database
-ListImages = create_image_path_list('test/valid')
+ListImages = create_image_path_list('dataset/test')
 
 # Initiate SIFT detector
 sift = cv2.SIFT_create()
